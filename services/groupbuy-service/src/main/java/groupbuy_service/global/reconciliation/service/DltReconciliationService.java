@@ -26,6 +26,13 @@ public class DltReconciliationService {
             Object payload,
             String errorMessage
     ) {
+        if (originalPartition == null || originalOffset == null) {
+            log.warn(
+                    "DLT original metadata missing; deduplication unavailable. topic={}, partition={}, offset={}",
+                    topic, originalPartition, originalOffset
+            );
+        }
+
         String jsonPayload = serializePayload(payload);
 
         FailedEvent failedEvent = FailedEvent.builder()

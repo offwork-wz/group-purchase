@@ -87,11 +87,15 @@ groupbuy-service와 inventory-service는 최종 실패 이벤트를 각 서비�
 | 컬럼 | 내용 |
 | --- | --- |
 | `topic` | 최초 원본 Kafka 토픽 |
+| `original_partition` | 원본 Kafka 레코드의 파티션 (헤더 누락 시 NULL) |
+| `original_offset` | 원본 Kafka 레코드의 오프셋 (헤더 누락 시 NULL) |
 | `payload` | 재처리에 필요한 원본 이벤트 JSON |
 | `error_message` | 마지막 처리 실패 메시지 |
 | `created_at` | 실패 기록 시각 |
 
-inventory-service는 원본 Kafka 레코드의 `partition`과 `offset`도 함께 저장합니다. `(topic, original_partition, original_offset)` 복합 유일성 제약과 원자적인 중복 무시 INSERT를 사용하여 동일한 DLT 레코드가 재전달되어도 한 번만 기록합니다.
+groupbuy-service와 inventory-service는 `(topic, original_partition, original_offset)` 복합 유일성 제약과 원자적인 중복 무시 INSERT를 사용합니다. 원본 좌표가 모두 있는 경우 동일한 원본 Kafka 레코드의 DLT 이벤트가 재전달되어도 한 번만 기록합니다.
+
+원본 `partition` 또는 `offset` 헤더가 누락된 경우에도 실패 기록은 저장하며, 중복 방지를 보장할 수 없다는 WARN 로그를 남깁니다. 이 경우 재전달 시 중복 기록이 생길 수 있습니다. 기존 실패 기록의 원본 좌표는 NULL로 유지하며, 이번 변경으로 기존 중복 기록을 정리하지는 않습니다.
 
 > Non-blocking Retry는 처리량을 보호하지만 동일 키 이벤트의 처리 순서가 달라질 수 있습니다. 도메인 상태 전이와 멱등성 보강은 지속적인 개선 대상입니다.
 

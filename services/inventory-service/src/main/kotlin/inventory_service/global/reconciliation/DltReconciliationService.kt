@@ -21,6 +21,15 @@ class DltReconciliationService(
         payload: Any,
         errorMessage: String
     ) {
+        if (originalPartition == null || originalOffset == null) {
+            log.warn(
+                "DLT original metadata missing; deduplication unavailable. topic={}, partition={}, offset={}",
+                topic,
+                originalPartition,
+                originalOffset
+            )
+        }
+
         val failedEvent = FailedEvent(
             topic = topic,
             originalPartition = originalPartition,
