@@ -19,16 +19,44 @@ public class DltReconciliationService {
     private static final String FALLBACK_PAYLOAD = "Serialization failed";
 
     @Transactional
-    public void logFailedEvent(String topic, Object payload, String errorMessage)
-    {
+    public void logFailedEvent(
+            String topic,
+            Integer originalPartition,
+            Long originalOffset,
+            Object payload,
+            String errorMessage
+    ) {
+        if (originalPartition == null || originalOffset == null) {
+            log.warn(
+                    "DLT original metadata missing; deduplication unavailable. topic={}, partition={}, offset={}",
+                    topic, originalPartition, originalOffset
+            );
+        }
+
         String jsonPayload = serializePayload(payload);
 
         FailedEvent failedEvent = FailedEvent.builder()
                 .topic(topic)
+                .originalPartition(originalPartition)
+                .originalOffset(originalOffset)
                 .payload(jsonPayload)
                 .errorMessage(errorMessage)
                 .build();
-        failedEventRepository.save(failedEvent);
+
+        int insertedRows = failedEventRepository.insertIgnoringDuplicate(
+                failedEvent.getFailedEventId(),
+                failedEvent.getTopic(),
+                failedEvent.getOriginalPartition(),
+                failedEvent.getOriginalOffset(),
+                failedEvent.getPayload(),
+                failedEvent.getErrorMessage(),
+                failedEvent.getCreatedAt()
+        );
+
+        if (insertedRows == 0) {
+            log.info("DLT failed event already recorded. topic={}, partition={}, offset={}",
+                    topic, originalPartition, originalOffset);
+        }
     }
 
     private String serializePayload(Object payload) {

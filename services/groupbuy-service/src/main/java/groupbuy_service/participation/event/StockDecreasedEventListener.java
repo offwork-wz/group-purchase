@@ -39,6 +39,8 @@ public class StockDecreasedEventListener {
     public void handleDlt(
             StockDecreasedEvent event,
             @Header(value = KafkaHeaders.ORIGINAL_TOPIC, required = false) String originalTopic,
+            @Header(value = KafkaHeaders.ORIGINAL_PARTITION, required = false) Integer originalPartition,
+            @Header(value = KafkaHeaders.ORIGINAL_OFFSET, required = false) Long originalOffset,
             @Header(value = KafkaHeaders.EXCEPTION_MESSAGE, required = false) String exceptionMessage
     ) {
         String topic = originalTopic != null
@@ -50,6 +52,6 @@ public class StockDecreasedEventListener {
 
         log.error("[DLT] 재고 차감 성공 이벤트 처리 최종 실패. topic: {}, error: {}, content: {}",
                 topic, errorMessage, event);
-        dltReconciliationService.logFailedEvent(topic, event, errorMessage);
+        dltReconciliationService.logFailedEvent(topic, originalPartition, originalOffset, event, errorMessage);
     }
 }

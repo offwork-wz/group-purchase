@@ -4,6 +4,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -13,7 +14,13 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "tb_failed_event")
+@Table(
+        name = "tb_failed_event",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uq_failed_event_original_record",
+                columnNames = {"topic", "original_partition", "original_offset"}
+        )
+)
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class FailedEvent {
@@ -25,6 +32,12 @@ public class FailedEvent {
     @Column(nullable = false, length = 100)
     private String topic;
 
+    @Column(name = "original_partition")
+    private Integer originalPartition;
+
+    @Column(name = "original_offset")
+    private Long originalOffset;
+
     @Column(nullable = false, columnDefinition = "TEXT")
     private String payload;
 
@@ -35,12 +48,14 @@ public class FailedEvent {
     private Instant createdAt;
 
     @Builder
-    public FailedEvent(String topic, String payload, String errorMessage) {
-                this.failedEventId = UUID.randomUUID().toString();
-                this.topic = topic;
-                this.payload = payload;
-                this.errorMessage = errorMessage;
-                this.createdAt = Instant.now();
+    public FailedEvent(String topic, Integer originalPartition, Long originalOffset, String payload, String errorMessage) {
+        this.failedEventId = UUID.randomUUID().toString();
+        this.topic = topic;
+        this.originalPartition = originalPartition;
+        this.originalOffset = originalOffset;
+        this.payload = payload;
+        this.errorMessage = errorMessage;
+        this.createdAt = Instant.now();
     }
 
 

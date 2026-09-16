@@ -47,6 +47,8 @@ public class PaymentCompletedEventListener {
     public void handleDlt(
             PaymentCompletedEvent event,
             @Header(value = KafkaHeaders.ORIGINAL_TOPIC, required = false) String originalTopic,
+            @Header(value = KafkaHeaders.ORIGINAL_PARTITION, required = false) Integer originalPartition,
+            @Header(value = KafkaHeaders.ORIGINAL_OFFSET, required = false) Long originalOffset,
             @Header(value = KafkaHeaders.EXCEPTION_MESSAGE, required = false) String exceptionMessage
     ) {
         String topic = originalTopic != null
@@ -57,7 +59,7 @@ public class PaymentCompletedEventListener {
                 : "FailedEvent: PaymentCompletedEvent";
 
         log.error("결제 완료 처리 실패, topic: {}, event: {}, content: {}", topic, event, errorMessage);
-        dltReconciliationService.logFailedEvent(topic, event, errorMessage);
+        dltReconciliationService.logFailedEvent(topic, originalPartition, originalOffset, event, errorMessage);
     }
 
 }

@@ -41,6 +41,8 @@ public class GroupbuyConfirmedEventListener {
     public void handleDlt(
             GroupbuyConfirmedEvent event,
             @Header(value = KafkaHeaders.ORIGINAL_TOPIC, required = false) String originalTopic,
+            @Header(value = KafkaHeaders.ORIGINAL_PARTITION, required = false) Integer originalPartition,
+            @Header(value = KafkaHeaders.ORIGINAL_OFFSET, required = false) Long originalOffset,
             @Header(value = KafkaHeaders.EXCEPTION_MESSAGE, required = false) String exceptionMessage
     ) {
         String topic = originalTopic != null
@@ -51,7 +53,7 @@ public class GroupbuyConfirmedEventListener {
                 : "FailedEvent: GroupbuyConfirmedEvent";
 
         log.error("공동구매 확정 이벤트 처리 실패, topic: {}, event: {}, content: {}", topic, event, errorMessage);
-        reconciliationService.logFailedEvent(topic, event, errorMessage);
+        reconciliationService.logFailedEvent(topic, originalPartition, originalOffset, event, errorMessage);
     }
 
 }
