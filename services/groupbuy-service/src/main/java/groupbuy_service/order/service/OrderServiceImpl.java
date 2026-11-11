@@ -3,6 +3,8 @@ package groupbuy_service.order.service;
 import groupbuy_service.global.BusinessException;
 import groupbuy_service.global.ErrorCode;
 import groupbuy_service.groupbuy.repository.GroupbuyRepository;
+import groupbuy_service.groupbuy.domain.Groupbuy;
+import groupbuy_service.groupbuy.domain.GroupbuyStatus;
 import groupbuy_service.order.domain.Order;
 import groupbuy_service.order.domain.OrderStatus;
 import groupbuy_service.order.event.OrderCancelledEvent;
@@ -37,10 +39,18 @@ public class OrderServiceImpl implements OrderService{
     @Override
     @Transactional
     public void createOrdersForGroupbuy(String groupbuyId, String productId) {
+        Groupbuy groupbuy = groupbuyRepository.findByIdWithLock(groupbuyId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.GROUPBUY_NOT_FOUND));
+        if (!groupbuy.getProductId().equals(productId)) {
+            throw new BusinessException(ErrorCode.GROUPBUY_PRODUCT_MISMATCH);
+        }
+        if (groupbuy.getStatus() != GroupbuyStatus.COMPLETED) {
+            throw new BusinessException(ErrorCode.GROUPBUY_INVALID);
+        }
 
-        List<Participation> participations = participationRepository.findAllByGroupbuyIdAndStatus(groupbuyId, ParticipationStatus.SUCCESS);
+        List<Participation> participations = participationRepository.findWithoutOrder(groupbuyId, ParticipationStatus.SUCCESS);
         if (participations.isEmpty()){
-            log.info("공동구매 참여자가 없습니다. groupbuyId: {}", groupbuyId);
+            log.info("추가로 주문할 참여가 없습니다. groupbuyId: {}", groupbuyId);
             return;
         }
 

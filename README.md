@@ -69,6 +69,17 @@ sequenceDiagram
 3. 결제 결과는 `payment.completed` 이벤트로 주문 상태에 반영됩니다.
 4. 주문 취소 시 `order.cancelled` 이벤트를 발행하고 inventory-service가 재고를 복구합니다.
 
+목표 수량은 성사 기준입니다. 목표 달성 후 신규 참여 요청은 차단하지만, 달성 전에
+접수된 참여는 재고 결과가 늦게 도착해도 확정합니다. 추가 확정 시 같은
+`groupbuy.confirmed` 이벤트를 발행하고 아직 주문이 없는 성공 참여만 주문으로 만듭니다.
+참여 확정은 참여 행 잠금, 주문 생성은 공동구매 행 잠금과 참여 ID 유일성 제약으로
+중복 반영을 방지합니다. 기존 주문이 취소된 참여도 다시 주문하지 않습니다.
+
+V6 마이그레이션은 기존 중복 주문이 있으면 중단하며 데이터를 자동 삭제하지 않습니다.
+2026-11-11 별도 검증 DB에서 Flyway/JPA validate와 실제 Kafka/HTTP 흐름을 확인했습니다.
+목표 1에 선접수한 2건 모두 주문·결제로 이어지고, 확정 이벤트 반복 전달에도 주문과
+결제는 각 2건을 유지했습니다. 이 종단 검증은 재고 복구 멱등성 변경도 함께 적용한 상태에서 수행했습니다. 실제 병렬 실행을 통한 동시성 검증은 미실시입니다.
+
 ## Reliability
 
 ### Non-blocking Retry와 DLT
@@ -144,8 +155,8 @@ DB 변경 후 Kafka 발행 실패는 별도 개선 대상입니다.
 Java 기반 핵심 서비스입니다.
 
 - 상품 등록과 조회
-- 공동구매 생성과 오픈
-- 참여 요청과 상태 관리
+- 공동구매 생성·오픈과 상태·수량 조회
+- 참여 요청 검증과 상태 관리 (잘못된 입력은 HTTP 400)
 - 주문 생성, 결제 결과 반영과 취소
 - Kafka Retry/DLT 및 최종 실패 이벤트 대사
 
@@ -157,6 +168,7 @@ Java 기반 핵심 서비스입니다.
 | `GET` | `/products` | 상품 목록 조회 |
 | `GET` | `/products/{productId}` | 상품 단건 조회 |
 | `POST` | `/groupbuy` | 공동구매 생성 |
+| `GET` | `/groupbuy/{groupbuyId}` | 공동구매 상태·목표 수량·현재 확정 수량 조회 |
 | `POST` | `/groupbuy/{groupbuyId}/open` | 공동구매 오픈 |
 | `POST` | `/groupbuy/{groupbuyId}/participate` | 공동구매 참여 요청 |
 
@@ -232,7 +244,7 @@ cd ..\inventory-service
 | `groupbuy.participation.requested` | groupbuy-service | inventory-service | 재고 차감 요청 |
 | `inventory.stock.decreased` | inventory-service | groupbuy-service | 참여 확정 |
 | `inventory.stock.decrease-failed` | inventory-service | groupbuy-service | 참여 실패 |
-| `groupbuy.confirmed` | groupbuy-service | groupbuy-service | 주문 일괄 생성 |
+| `groupbuy.confirmed` | groupbuy-service | groupbuy-service | 미주문 성공 참여의 주문 생성·추가 생성 |
 | `order.created` | groupbuy-service | groupbuy-service | 결제 생성 |
 | `payment.completed` | groupbuy-service | groupbuy-service | 주문 완료·취소 |
 | `order.cancelled` | groupbuy-service | inventory-service, groupbuy-service | 재고 복구와 참여 실패 처리 |

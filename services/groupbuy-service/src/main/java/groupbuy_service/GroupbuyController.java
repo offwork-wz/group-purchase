@@ -3,6 +3,7 @@ package groupbuy_service;
 
 import groupbuy_service.groupbuy.domain.Groupbuy;
 import groupbuy_service.groupbuy.dto.GroupbuyCreateRequest;
+import groupbuy_service.groupbuy.dto.GroupbuyResponse;
 import groupbuy_service.groupbuy.service.GroupbuyService;
 import jakarta.validation.Valid;
 import lombok.Getter;
@@ -19,6 +20,11 @@ import java.time.LocalDateTime;
 public class GroupbuyController {
 
     private final GroupbuyService groupbuyService;
+
+    @GetMapping("/{groupbuyId}")
+    public GroupbuyResponse getGroupbuy(@PathVariable String groupbuyId) {
+        return groupbuyService.getGroupbuy(groupbuyId);
+    }
 
     @PostMapping
     public String createGroupbuy(@Valid @RequestBody GroupbuyCreateRequest request) {

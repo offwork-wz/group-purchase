@@ -8,6 +8,8 @@ import lombok.Getter;
 public enum ErrorCode {
     //server
     INTERNAL_ERROR(500,"서버에러"),
+    INVALID_REQUEST(400, "요청 값이 올바르지 않습니다"),
+    GROUPBUY_PRODUCT_MISMATCH(400, "공동구매 상품과 요청 상품이 일치하지 않습니다"),
 
     //user
     USER_NOT_FOUND(404,"사용자를 찾을 수 없습니다"),
