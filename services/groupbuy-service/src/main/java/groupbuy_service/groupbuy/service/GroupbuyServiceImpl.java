@@ -5,6 +5,7 @@ import groupbuy_service.global.ErrorCode;
 import groupbuy_service.groupbuy.domain.Groupbuy;
 import groupbuy_service.groupbuy.domain.GroupbuyStatus;
 import groupbuy_service.groupbuy.repository.GroupbuyRepository;
+import groupbuy_service.groupbuy.dto.GroupbuyResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -18,6 +19,13 @@ import java.time.LocalDateTime;
 public class GroupbuyServiceImpl implements GroupbuyService {
 
     private final GroupbuyRepository groupbuyRepository;
+
+    @Override
+    @Transactional(readOnly = true)
+    public GroupbuyResponse getGroupbuy(String groupbuyId) {
+        return GroupbuyResponse.from(groupbuyRepository.findById(groupbuyId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.GROUPBUY_NOT_FOUND)));
+    }
 
     @Override
     @Transactional

@@ -30,7 +30,14 @@ public class ParticipationServiceImpl implements ParticipationService {
     @Override
     public void participate(String groupbuyId, ParticipationRequest request) {
         Groupbuy groupbuy = groupbuyRepository.findByIdWithLock(groupbuyId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.INTERNAL_ERROR));
+                .orElseThrow(() -> new BusinessException(ErrorCode.GROUPBUY_NOT_FOUND));
+
+        if (!groupbuy.getProductId().equals(request.productId())) {
+            throw new BusinessException(ErrorCode.GROUPBUY_PRODUCT_MISMATCH);
+        }
+        if (request.quantity() <= 0) {
+            throw new BusinessException(ErrorCode.ORDER_QUANTITY_INVALID);
+        }
 
         if (groupbuy.getStatus() != GroupbuyStatus.OPEN) {
             throw new BusinessException(ErrorCode.PARTICIPATION_NOT_AVAILABLE);
@@ -52,7 +59,7 @@ public class ParticipationServiceImpl implements ParticipationService {
     @Transactional
     @Override
     public void confirmParticipation(String participationId) {
-        Participation participation = participationRepository.findById(participationId)
+        Participation participation = participationRepository.findByIdWithLock(participationId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.INTERNAL_ERROR));
 
         if (participation.getStatus() != ParticipationStatus.REQUESTED) {
@@ -63,8 +70,8 @@ public class ParticipationServiceImpl implements ParticipationService {
         Groupbuy groupbuy = groupbuyRepository.findByIdWithLock(participation.getGroupbuyId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.GROUPBUY_NOT_FOUND));
 
-        // OPEN 상태일 때만 수량 추가
-        if (groupbuy.getStatus() != GroupbuyStatus.OPEN) {
+        // 완료 전에 접수된 REQUESTED 참여는 목표 달성 후에도 확정한다.
+        if (groupbuy.getStatus() != GroupbuyStatus.OPEN && groupbuy.getStatus() != GroupbuyStatus.COMPLETED) {
             log.warn("공동구매가 오픈 상태가 아니므로 참여를 확정할 수 없습니다. groupbuyId={}, status={}", groupbuy.getGroupbuyId(), groupbuy.getStatus());
             participation.updateStatus(ParticipationStatus.FAILED);
             return;

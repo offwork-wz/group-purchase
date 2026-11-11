@@ -22,6 +22,7 @@ public class Order extends BaseEntity {
     private String groupbuyId;
     private String productId;
     private String userId;
+    @Column(nullable = false, unique = true)
     private String participationId;
 
     private int quantity;
