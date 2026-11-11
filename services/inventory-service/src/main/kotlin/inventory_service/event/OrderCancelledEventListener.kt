@@ -29,7 +29,7 @@ class OrderCancelledEventListener(
     )
     @KafkaListener(topics = [OrderCancelledEvent.TOPIC], groupId = "inventory-service-order-cancelled")
     fun restoreStock(event: OrderCancelledEvent) {
-        inventoryService.increaseStock(event.productId, event.quantity)
+        inventoryService.restoreStockForOrder(event.orderId, event.productId, event.quantity)
     }
 
     @DltHandler
