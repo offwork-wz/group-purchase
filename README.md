@@ -99,6 +99,26 @@ groupbuy-service와 inventory-service는 `(topic, original_partition, original_o
 
 > Non-blocking Retry는 처리량을 보호하지만 동일 키 이벤트의 처리 순서가 달라질 수 있습니다. 도메인 상태 전이와 멱등성 보강은 지속적인 개선 대상입니다.
 
+### 주문 취소 재고 복구 멱등성
+
+inventory-service는 `stock_restore_history.order_id` PK와 충돌 무시 INSERT를 사용해
+같은 주문의 재고 복구를 한 번만 반영합니다. 복구 기록과 재고 증가는 하나의 DB
+트랜잭션에서 커밋하며, 재고 처리 실패 시 기록도 롤백합니다. 수량은 양수만 허용합니다.
+
+같은 주문이 다른 eventId나 Kafka 좌표로 다시 전달되어도 재고를 추가로 늘리지 않습니다.
+상품 또는 수량이 기존 복구 이력과 다르면 최초 결과를 유지하고, 저장된 값과 수신 값을
+WARN 로그에 남깁니다. 실제 DB 오류는 기존 Retry/DLT 경로로 전달합니다.
+
+주문당 전체 취소 한 번을 전제로 하며 부분 취소는 지원하지 않습니다. 도입 전에 이미
+복구된 주문은 이력이 없으므로 과거 이벤트 재전달을 보호하지 못합니다. 복구 이력을
+삭제하면 해당 주문의 중복 방지도 사라집니다. 실제 차감 여부 확인, 차감 멱등성과
+DB 변경 후 Kafka 발행 실패는 별도 개선 대상입니다.
+
+검증 현황(2026-11-11): JDK 21 빌드, 별도 DB의 Flyway/JPA validate,
+실제 Kafka 순차 중복 및 내용 불일치, 결제 실패 복구, 없는 상품 처리 시 이력 롤백,
+0/음수 수량 거부와 Retry/DLT, 상품 생성 후 동일 주문 재전달을 확인했습니다.
+실제 병렬 실행을 통한 동시성 검증은 미실시입니다.
+
 ### Schema Management
 
 - groupbuy-service와 inventory-service는 Flyway 마이그레이션과 `ddl-auto=validate`를 사용합니다.
@@ -147,7 +167,7 @@ Kotlin 기반 재고 서비스입니다.
 - 상품 생성 이벤트를 통한 재고 등록
 - 참여 요청 이벤트를 통한 재고 차감
 - 재고 차감 성공·실패 이벤트 발행
-- 주문 취소 이벤트를 통한 재고 복구
+- 주문 ID 기반 멱등성을 보장하는 주문 취소 재고 복구
 - Kafka Retry/DLT 및 원본 레코드 좌표 기반 실패 이벤트 중복 방지
 
 ### Skeleton Services

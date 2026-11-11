@@ -4,13 +4,44 @@ import inventory_service.domain.Inventory
 import inventory_service.global.error.BusinessException
 import inventory_service.global.error.ErrorCode
 import inventory_service.repository.InventoryRepository
+import inventory_service.repository.StockRestoreHistoryRepository
+import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
 @Service
 class InventoryService(
-    private val inventoryRepository: InventoryRepository
+    private val inventoryRepository: InventoryRepository,
+    private val stockRestoreHistoryRepository: StockRestoreHistoryRepository
 ) {
+    private val log = KotlinLogging.logger {}
+
+    @Transactional
+    fun restoreStockForOrder(orderId: String, productId: String, quantity: Int) {
+        if (quantity <= 0) {
+            throw BusinessException(ErrorCode.INVALID_QUANTITY)
+        }
+
+        val insertedRows = stockRestoreHistoryRepository.insertIgnoringDuplicate(orderId, productId, quantity)
+        if (insertedRows == 0) {
+            val history = stockRestoreHistoryRepository.findById(orderId)
+                .orElseThrow { IllegalStateException("재고 복구 이력을 찾을 수 없음. orderId=$orderId") }
+            if (history.productId != productId || history.quantity != quantity) {
+                log.warn {
+                    "주문 취소 재고 복구 중복 내용 불일치. orderId=$orderId, " +
+                        "storedProductId=${history.productId}, storedQuantity=${history.quantity}, " +
+                        "receivedProductId=$productId, receivedQuantity=$quantity"
+                }
+            } else {
+                log.info { "이미 재고를 복구한 주문. orderId=$orderId" }
+            }
+            return
+        }
+
+        val inventory = inventoryRepository.findByProductIdWithLock(productId)
+            .orElseThrow { BusinessException(ErrorCode.PRODUCT_NOT_FOUND) }
+        inventory.increase(quantity)
+    }
 
     @Transactional
     fun decreaseStock(productId: String, quantity: Int) {
