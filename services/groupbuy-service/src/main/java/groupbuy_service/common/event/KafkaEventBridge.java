@@ -2,10 +2,13 @@ package groupbuy_service.common.event;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.kafka.core.KafkaTemplate;
+import groupbuy_service.common.outbox.OutboxEvent;
+import groupbuy_service.common.outbox.OutboxEventRepository;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.json.JsonMapper;
 
 @Slf4j
@@ -13,17 +16,14 @@ import tools.jackson.databind.json.JsonMapper;
 @RequiredArgsConstructor
 public class KafkaEventBridge {
 
-    private final KafkaTemplate<String, String> kafkaTemplate;
+    private final OutboxEventRepository outboxEventRepository;
     private final JsonMapper jsonMapper;
 
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
+    @Transactional(propagation = Propagation.MANDATORY)
     public void handleDomainEvent(DomainEvent event) {
-        log.info("Publishing event to Kafka after commit: {}", event.getTopic());
-        try {
-            String payload = jsonMapper.writeValueAsString(event);
-            kafkaTemplate.send(event.getTopic(), event.getKey(), payload);
-        } catch (Exception e) {
-            log.error("Failed to serialize or send event: {}", event.getTopic(), e);
-        }
+        String payload = jsonMapper.writeValueAsString(event);
+        outboxEventRepository.save(new OutboxEvent(event.getTopic(), event.getKey(), payload));
+        log.debug("Outbox event saved in domain transaction: topic={}, key={}", event.getTopic(), event.getKey());
     }
 }

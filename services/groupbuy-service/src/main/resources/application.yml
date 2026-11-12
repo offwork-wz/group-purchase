@@ -22,8 +22,19 @@ spring:
   kafka:
     bootstrap-servers: localhost:9094
     producer:
+      acks: all
+      properties:
+        max.block.ms: 5000
+        request.timeout.ms: 5000
+        delivery.timeout.ms: 10000
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
 
 server:
   port: 8081
+
+outbox:
+  publisher:
+    enabled: true
+    poll-interval-ms: 1000
+    batch-size: 20
