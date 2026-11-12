@@ -1,7 +1,7 @@
 package inventory_service.event
 
-import inventory_service.global.error.BusinessException
-import inventory_service.global.error.ErrorCode
+import inventory_service.domain.StockDeductionHistory
+import inventory_service.domain.StockDeductionStatus
 import inventory_service.global.reconciliation.DltReconciliationService
 import inventory_service.service.InventoryService
 import org.slf4j.LoggerFactory
@@ -35,24 +35,14 @@ class ParticipationEventListener(
     )
     @KafkaListener(topics = [ParticipationRequestedEvent.TOPIC], groupId = "inventory-service-group")
     fun onParticipationRequested(event: ParticipationRequestedEvent) {
-        try {
-            log.info(
-                "[inventory-service] 참여 요청 수신: eventId={}, participationId={}, productId={}, userId={}, quantity={}",
-                event.eventId, event.participationId, event.productId, event.userId, event.quantity
-            )
-
-            inventoryService.decreaseStock(event.productId, event.quantity)
-            log.info("[inventory-service] 재고 차감 성공: productId={}, quantity={}", event.productId, event.quantity)
-
-            publishSuccessEvent(event)
-        } catch (e: BusinessException) {
-            if (shouldRetry(e.errorCode)) {
-                throw e
-            }
-
-            log.warn("[inventory-service] 재고 차감 비즈니스 실패: {}", e.errorCode.msg)
-            publishFailureEvent(event, e.errorCode.name, e.errorCode.msg)
-            // 비즈니스 예외(재고 부족 등)는 정상적인 Saga 실패 흐름이므로 throw하지 않고 완료 처리.
+        val history = inventoryService.deductStockForParticipation(
+            event.participationId, event.groupbuyId, event.productId, event.userId, event.quantity
+        )
+        // 서비스 트랜잭션이 커밋된 결과만 발행한다. 중복도 저장된 원본 결과를 사용한다.
+        when (history.status) {
+            StockDeductionStatus.SUCCESS -> publishSuccessEvent(history)
+            StockDeductionStatus.FAILED -> publishFailureEvent(history)
+            StockDeductionStatus.PROCESSING -> error("미완료 재고 차감 결과. participationId=${history.participationId}")
         }
     }
 
@@ -71,34 +61,30 @@ class ParticipationEventListener(
         dltReconciliationService.logFailedEvent(topic, originalPartition, originalOffset, event, errorMessage)
     }
 
-    private fun publishSuccessEvent(requestEvent: ParticipationRequestedEvent) {
+    private fun publishSuccessEvent(history: StockDeductionHistory) {
         val successEvent = StockDecreasedEvent(
-            participationId = requestEvent.participationId,
-            productId = requestEvent.productId,
-            quantity = requestEvent.quantity
+            eventId = history.resultEventId,
+            occurredAt = history.createdAt,
+            participationId = history.participationId,
+            productId = history.productId,
+            quantity = history.quantity
         )
         val payload = jsonMapper.writeValueAsString(successEvent)
-        kafkaTemplate.send(StockDecreasedEvent.TOPIC, requestEvent.participationId, payload)
+        kafkaTemplate.send(StockDecreasedEvent.TOPIC, history.participationId, payload)
     }
 
-    private fun publishFailureEvent(requestEvent: ParticipationRequestedEvent, errorCode: String, errorMessage: String) {
+    private fun publishFailureEvent(history: StockDeductionHistory) {
         val failureEvent = StockDecreaseFailedEvent(
-            participationId = requestEvent.participationId,
-            productId = requestEvent.productId,
-            quantity = requestEvent.quantity,
-            errorCode = errorCode,
-            errorMessage = errorMessage
+            eventId = history.resultEventId,
+            occurredAt = history.createdAt,
+            participationId = history.participationId,
+            productId = history.productId,
+            quantity = history.quantity,
+            errorCode = checkNotNull(history.errorCode).name,
+            errorMessage = checkNotNull(history.errorMessage)
         )
         val payload = jsonMapper.writeValueAsString(failureEvent)
-        kafkaTemplate.send(StockDecreaseFailedEvent.TOPIC, requestEvent.participationId, payload)
+        kafkaTemplate.send(StockDecreaseFailedEvent.TOPIC, history.participationId, payload)
     }
-
-    private fun shouldRetry(errorCode: ErrorCode): Boolean =
-        when (errorCode) {
-            ErrorCode.PRODUCT_NOT_FOUND,
-            ErrorCode.INTERNAL_ERROR -> true
-
-            else -> false
-        }
 
 }
